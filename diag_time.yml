@@ -1,0 +1,24 @@
+# For alert: System time is out of sync or NTP service is not synchronized on a Linux host.
+# Reports: System clock, timezone, and NTP synchronization status.
+---
+- name: System clock and NTP sync status
+  hosts: all
+  gather_facts: false
+  any_errors_fatal: true
+  timeout: 30
+
+  tasks:
+    - name: Refuse to run on more than one host
+      ansible.builtin.assert:
+        that: ansible_play_hosts_all | length == 1
+        fail_msg: "Run with --limit set to exactly one host."
+
+    - name: Time and sync state
+      ansible.builtin.command: timedatectl
+      register: time_status
+      changed_when: false
+
+    - name: Report
+      ansible.builtin.debug:
+        msg:
+          timedatectl: "{{ time_status.stdout_lines[:10] }}"
