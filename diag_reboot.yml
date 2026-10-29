@@ -1,0 +1,32 @@
+# For alert: Host has been restarted or uptime is unusually low on a Linux host.
+# Reports: Last boot timestamp and the five most recent reboot entries.
+---
+- name: Recent reboot history and uptime
+  hosts: all
+  gather_facts: false
+  any_errors_fatal: true
+  timeout: 30
+
+  tasks:
+    - name: Refuse to run on more than one host
+      ansible.builtin.assert:
+        that: ansible_play_hosts_all | length == 1
+        fail_msg: "Run with --limit set to exactly one host."
+
+    - name: Last boot time
+      ansible.builtin.command: uptime -s
+      register: boot_time
+      changed_when: false
+
+    - name: Recent reboot entries
+      ansible.builtin.command: last -x reboot -n 5
+      register: reboot_list
+      changed_when: false
+      failed_when: false
+
+    - name: Report
+      ansible.builtin.debug:
+        msg:
+          boot_time: "{{ boot_time.stdout }}"
+          reboot_rc: "{{ reboot_list.rc }}"
+          recent_reboots: "{{ reboot_list.stdout_lines[:7] }}"
