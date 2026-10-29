@@ -1,0 +1,49 @@
+# Read-only diagnostic for router or routing issues on a Linux host.
+# IQ Core runs this playbook through Semaphore on the alert host.
+# Changes nothing and needs no sudo.
+
+- name: Router issue diagnostics
+  hosts: all
+  gather_facts: false
+  any_errors_fatal: true
+  timeout: 30
+
+  tasks:
+    # Refuse to run on multiple hosts.
+    - name: Refuse to run on more than one host
+      ansible.builtin.assert:
+        that: ansible_play_hosts_all | length == 1
+        fail_msg: "Run with --limit set to exactly one host."
+
+    # Show network interface status.
+    - name: Check network interfaces
+      ansible.builtin.command: ip -brief link
+      register: interfaces
+      changed_when: false
+
+    # Show assigned IP addresses.
+    - name: Check IP addresses
+      ansible.builtin.command: ip -brief address
+      register: addresses
+      changed_when: false
+
+    # Show current routing table.
+    - name: Check routing table
+      ansible.builtin.command: ip route show
+      register: routes
+      changed_when: false
+
+    # Show the default gateway route.
+    - name: Check default route
+      ansible.builtin.command: ip route show default
+      register: default_route
+      changed_when: false
+
+    # Keep ticket output short and useful.
+    - name: Report
+      ansible.builtin.debug:
+        msg:
+          network_interfaces: "{{ interfaces.stdout_lines[:10] }}"
+          ip_addresses: "{{ addresses.stdout_lines[:10] }}"
+          routing_table: "{{ routes.stdout_lines[:10] }}"
+          default_route: "{{ default_route.stdout_lines[:5] }}"
