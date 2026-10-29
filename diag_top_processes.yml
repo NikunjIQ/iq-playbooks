@@ -1,0 +1,47 @@
+# Read-only diagnostic for high CPU / memory alerts on a Linux host.
+# IQ Core starts it with --limit <one host> and pastes the output into the ticket.
+# Changes nothing and needs no sudo.
+- name: Top processes by CPU and memory
+  hosts: all
+  gather_facts: false
+  any_errors_fatal: true
+  timeout: 30
+  tasks:
+    # Without a limit, hosts: all would run this on every server.
+    - name: Refuse to run on more than one host
+      ansible.builtin.assert:
+        that: ansible_play_hosts_all | length == 1
+        fail_msg: "Run with --limit set to exactly one host."
+
+    - name: Load and uptime
+      ansible.builtin.command: uptime
+      register: up
+      changed_when: false
+
+    - name: Memory
+      ansible.builtin.command: free -m
+      register: mem
+      changed_when: false
+
+    # ps %cpu is the average since each process started, so it ranks the wrong things.
+    # top's second sample is usage over the last second. It shows names, not full
+    # command lines, which can carry passwords.
+    - name: Processes by CPU (now)
+      ansible.builtin.command: top -b -n 2 -d 1 -o %CPU -w 200
+      register: by_cpu
+      changed_when: false
+
+    # %mem is current resident memory, so ps is accurate here. comm, not args, as above.
+    - name: Processes by memory
+      ansible.builtin.command: ps -eo pid,user,%cpu,%mem,etime,comm --sort=-%mem
+      register: by_mem
+      changed_when: false
+
+    - name: Report
+      ansible.builtin.debug:
+        msg:
+          uptime: "{{ up.stdout }}"
+          memory_mb: "{{ mem.stdout_lines }}"
+          # Second sample only; lines 6-11 are the column header and the top 5.
+          top_cpu: "{{ (by_cpu.stdout.split('top - ')[-1]).splitlines()[6:12] }}"
+          top_memory: "{{ by_mem.stdout_lines[:6] }}"
