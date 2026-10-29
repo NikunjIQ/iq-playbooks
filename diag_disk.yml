@@ -1,0 +1,30 @@
+# For alert: Disk space is critically low or inode usage is high on a Linux host.
+# Reports: Filesystem disk space usage and inode usage per mount.
+---
+- name: Disk space and inode usage
+  hosts: all
+  gather_facts: false
+  any_errors_fatal: true
+  timeout: 30
+
+  tasks:
+    - name: Refuse to run on more than one host
+      ansible.builtin.assert:
+        that: ansible_play_hosts_all | length == 1
+        fail_msg: "Run with --limit set to exactly one host."
+
+    - name: Disk usage by mount
+      ansible.builtin.command: df -h
+      register: disk_space
+      changed_when: false
+
+    - name: Inode usage by mount
+      ansible.builtin.command: df -i
+      register: disk_inodes
+      changed_when: false
+
+    - name: Report
+      ansible.builtin.debug:
+        msg:
+          disk_space: "{{ disk_space.stdout_lines[:15] }}"
+          inode_usage: "{{ disk_inodes.stdout_lines[:15] }}"
