@@ -1,0 +1,30 @@
+
+id: linux_disk_io_latency
+version: "1.0"
+
+match:
+  platform: linux
+  incident_type: disk_io_latency
+  device_type: disk
+
+parameters:
+  - name: disk
+    type: block_device
+    required: true
+
+recommendations:
+  - command: "iostat -xz {{ disk }} 1 5"
+    purpose: "Inspect disk latency and I/O utilization"
+    risk: low
+
+  - command: "lsblk -o NAME,SIZE,TYPE,MOUNTPOINTS"
+    purpose: "Identify disks and partitions"
+    risk: low
+
+  - command: "df -h"
+    purpose: "Check filesystem utilization"
+    risk: low
+
+verification:
+  - "Compare disk latency against the Zabbix threshold"
+  - "Check whether high latency persists"
