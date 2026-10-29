@@ -1,30 +1,79 @@
 
-id: linux_disk_io_latency
-version: "1.0"
+---
+# Read-only diagnostics for high disk I/O latency.
+# IQCore runs this with --limit <one host>.
+# No sudo, no configuration changes.
 
-match:
-  platform: linux
-  incident_type: disk_io_latency
-  device_type: disk
+- name: Linux disk I/O latency diagnostics
+  hosts: all
+  gather_facts: false
+  any_errors_fatal: true
+  timeout: 30
 
-parameters:
-  - name: disk
-    type: block_device
-    required: true
+  vars:
+    disk_device: "vda"
 
-recommendations:
-  - command: "iostat -xz {{ disk }} 1 5"
-    purpose: "Inspect disk latency and I/O utilization"
-    risk: low
+  tasks:
+    - name: Refuse to run on more than one host
+      ansible.builtin.assert:
+        that:
+          - ansible_play_hosts_all | length == 1
+        fail_msg: "Run with --limit set to exactly one host."
 
-  - command: "lsblk -o NAME,SIZE,TYPE,MOUNTPOINTS"
-    purpose: "Identify disks and partitions"
-    risk: low
+    - name: Validate disk device
+      ansible.builtin.assert:
+        that:
+          - disk_device is match('^[a-zA-Z0-9_-]+$')
+        fail_msg: "Invalid disk device name."
 
-  - command: "df -h"
-    purpose: "Check filesystem utilization"
-    risk: low
+    - name: System uptime and load
+      ansible.builtin.command: uptime
+      register: up
+      changed_when: false
 
-verification:
-  - "Compare disk latency against the Zabbix threshold"
-  - "Check whether high latency persists"
+    - name: Disk I/O statistics
+      ansible.builtin.command:
+        argv:
+          - iostat
+          - -xz
+          - "{{ disk_device }}"
+          - "1"
+          - "5"
+      register: disk_io
+      changed_when: false
+
+    - name: Block devices
+      ansible.builtin.command:
+        argv:
+          - lsblk
+          - -o
+          - NAME,SIZE,TYPE,MOUNTPOINTS
+      register: block_devices
+      changed_when: false
+
+    - name: Filesystem usage
+      ansible.builtin.command: df -h
+      register: disk_usage
+      changed_when: false
+
+    - name: Disk-related kernel messages
+      ansible.builtin.command: dmesg -T
+      register: kernel_logs
+      changed_when: false
+      failed_when: false
+
+    - name: Report
+      ansible.builtin.debug:
+        msg:
+          disk: "{{ disk_device }}"
+          uptime: "{{ up.stdout }}"
+          disk_io: "{{ disk_io.stdout_lines }}"
+          block_devices: "{{ block_devices.stdout_lines }}"
+          filesystem_usage: "{{ disk_usage.stdout_lines }}"
+          kernel_logs_available: "{{ kernel_logs.rc == 0 }}"
+          kernel_logs: >-
+            {{
+              kernel_logs.stdout_lines[-20:]
+              if kernel_logs.rc == 0
+              else ['Kernel logs unavailable']
+            }}
