@@ -1,0 +1,30 @@
+# For alert: High network traffic, packet drops, or interface errors on a Linux host.
+# Reports: Socket summary and network interface packet/error counters.
+---
+- name: Network socket summary and interface counters
+  hosts: all
+  gather_facts: false
+  any_errors_fatal: true
+  timeout: 30
+
+  tasks:
+    - name: Refuse to run on more than one host
+      ansible.builtin.assert:
+        that: ansible_play_hosts_all | length == 1
+        fail_msg: "Run with --limit set to exactly one host."
+
+    - name: Socket summary
+      ansible.builtin.command: ss -s
+      register: socket_summary
+      changed_when: false
+
+    - name: Interface traffic and error counters
+      ansible.builtin.command: ip -s link
+      register: iface_stats
+      changed_when: false
+
+    - name: Report
+      ansible.builtin.debug:
+        msg:
+          socket_summary: "{{ socket_summary.stdout_lines[:10] }}"
+          interface_counters: "{{ iface_stats.stdout_lines[:25] }}"
